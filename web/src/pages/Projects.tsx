@@ -25,9 +25,10 @@ export function Projects() {
   const [orgId, setOrgId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchProjects = () => {
+  const fetchProjects = (currentOrgId: string) => {
+    if (!currentOrgId) return;
     setIsLoading(true);
-    api.get('/v1/projects')
+    api.get(`/v1/projects?organization_id=${currentOrgId}`)
       .then(res => {
         setProjects(res.data || []);
       })
@@ -41,13 +42,18 @@ export function Projects() {
         setOrgs(res.data || []);
         if (res.data && res.data.length > 0) {
           setOrgId(res.data[0].id);
+          fetchProjects(res.data[0].id);
+        } else {
+          setIsLoading(false);
         }
       })
-      .catch(console.error);
+      .catch(err => {
+        console.error(err);
+        setIsLoading(false);
+      });
   };
 
   useEffect(() => {
-    fetchProjects();
     fetchOrgs();
   }, []);
 
@@ -57,11 +63,11 @@ export function Projects() {
     
     setIsSubmitting(true);
     try {
-      await api.post('/v1/projects', { name, description, org_id: orgId });
+      await api.post('/v1/projects', { name, description, organization_id: orgId });
       setIsModalOpen(false);
       setName('');
       setDescription('');
-      fetchProjects();
+      fetchProjects(orgId);
     } catch (error) {
       console.error(error);
     } finally {

@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Organizations } from './pages/Organizations';
 import { Projects } from './pages/Projects';
 import { Pipelines } from './pages/Pipelines';
+import { PipelineDetails } from './pages/PipelineDetails';
 
 function App() {
   return (
@@ -17,7 +18,7 @@ function App() {
           <Route path="/organizations" element={<Organizations />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/pipelines" element={<Pipelines />} />
-
+          <Route path="/pipelines/:id" element={<PipelineDetails />} />
         </Route>
       </Routes>
     </BrowserRouter>

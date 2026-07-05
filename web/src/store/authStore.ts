@@ -1,21 +1,35 @@
 import { create } from 'zustand';
 
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role?: string;
+}
+
 interface AuthState {
   isAuthenticated: boolean;
-  user: { name: string; email: string; role: string } | null;
-  login: (token: string) => void;
+  user: User | null;
+  login: (token: string, user: User) => void;
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  isAuthenticated: !!localStorage.getItem('auth_token'),
-  user: localStorage.getItem('auth_token') ? { name: 'Admin User', email: 'admin@forgeflow.com', role: 'admin' } : null,
-  login: (token) => {
-    localStorage.setItem('auth_token', token);
-    set({ isAuthenticated: true, user: { name: 'Admin User', email: 'admin@forgeflow.com', role: 'admin' } });
-  },
-  logout: () => {
-    localStorage.removeItem('auth_token');
-    set({ isAuthenticated: false, user: null });
-  },
-}));
+export const useAuthStore = create<AuthState>((set) => {
+  const storedUser = localStorage.getItem('auth_user');
+  const storedToken = localStorage.getItem('auth_token');
+  
+  return {
+    isAuthenticated: !!storedToken,
+    user: storedUser ? JSON.parse(storedUser) : null,
+    login: (token, user) => {
+      localStorage.setItem('auth_token', token);
+      localStorage.setItem('auth_user', JSON.stringify(user));
+      set({ isAuthenticated: true, user });
+    },
+    logout: () => {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      set({ isAuthenticated: false, user: null });
+    },
+  };
+});

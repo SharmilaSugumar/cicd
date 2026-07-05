@@ -64,6 +64,7 @@ func main() {
 	jobHandler := handlers.NewJobHandler(jobSvc)
 	queueHandler := handlers.NewQueueHandler(queueSvc)
 	workerHandler := handlers.NewWorkerHandler(workerSvc)
+	metricsHandler := handlers.NewMetricsHandler(database.DB)
 
 	// 6. Setup Gin
 	if os.Getenv("APP_ENV") == "production" {
@@ -117,6 +118,7 @@ func main() {
 			pipelineHandler.RegisterRoutes(protected.Group("/pipelines"))
 			jobHandler.RegisterRoutes(protected.Group("/jobs"))
 			queueHandler.RegisterRoutes(protected.Group("/queues"))
+			metricsHandler.RegisterRoutes(protected.Group("/metrics"))
 		}
 	}
 

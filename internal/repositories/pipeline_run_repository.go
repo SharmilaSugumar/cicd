@@ -14,6 +14,8 @@ type PipelineRunRepository interface {
 	Update(ctx context.Context, run *database.PipelineRun) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, limit, offset int) ([]database.PipelineRun, error)
+	ListByPipelineID(ctx context.Context, pipelineID uuid.UUID) ([]database.PipelineRun, error)
+	GetRunDetails(ctx context.Context, id uuid.UUID) (*database.PipelineRun, error)
 }
 
 type pipelineRunRepository struct {
@@ -46,4 +48,16 @@ func (r *pipelineRunRepository) List(ctx context.Context, limit, offset int) ([]
 	var runs []database.PipelineRun
 	err := r.db.WithContext(ctx).Limit(limit).Offset(offset).Find(&runs).Error
 	return runs, err
+}
+
+func (r *pipelineRunRepository) ListByPipelineID(ctx context.Context, pipelineID uuid.UUID) ([]database.PipelineRun, error) {
+	var runs []database.PipelineRun
+	err := r.db.WithContext(ctx).Where("pipeline_id = ?", pipelineID).Order("created_at desc").Find(&runs).Error
+	return runs, err
+}
+
+func (r *pipelineRunRepository) GetRunDetails(ctx context.Context, id uuid.UUID) (*database.PipelineRun, error) {
+	var run database.PipelineRun
+	err := r.db.WithContext(ctx).Preload("Jobs.Logs").Preload("Jobs.DLQ").Preload("Jobs").First(&run, "id = ?", id).Error
+	return &run, err
 }

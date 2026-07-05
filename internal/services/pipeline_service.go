@@ -9,10 +9,13 @@ import (
 )
 
 type PipelineService interface {
-	CreatePipeline(ctx context.Context, projectID, userID uuid.UUID, name, config string) (*database.Pipeline, error)
+	CreatePipeline(ctx context.Context, projectID, userID uuid.UUID, name, description, config string) (*database.Pipeline, error)
 	ValidatePipelineConfiguration(ctx context.Context, config string) (bool, error)
 	AssociateQueue(ctx context.Context, pipelineID, queueID uuid.UUID) error
 	VerifyPermissions(ctx context.Context, pipelineID, userID uuid.UUID, requiredRole database.OrganizationRole) (bool, error)
+	ListPipelinesByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]database.Pipeline, error)
+	GetPipeline(ctx context.Context, id uuid.UUID) (*database.Pipeline, error)
+	DeletePipeline(ctx context.Context, id uuid.UUID) error
 }
 
 type pipelineService struct {
@@ -29,7 +32,7 @@ func NewPipelineService(pipelineRepo repositories.PipelineRepository, projectRep
 	}
 }
 
-func (s *pipelineService) CreatePipeline(ctx context.Context, projectID, userID uuid.UUID, name, config string) (*database.Pipeline, error) {
+func (s *pipelineService) CreatePipeline(ctx context.Context, projectID, userID uuid.UUID, name, description, config string) (*database.Pipeline, error) {
 	// Verify user access to the project
 	project, err := s.projectRepo.GetByID(ctx, projectID)
 	if err != nil {
@@ -49,7 +52,8 @@ func (s *pipelineService) CreatePipeline(ctx context.Context, projectID, userID 
 	pipeline := &database.Pipeline{
 		ProjectID:   projectID,
 		Name:        name,
-		Description: config, // Assuming config is stored in description for now
+		Description: description,
+		YamlConfig:  config,
 	}
 
 	if err := s.pipelineRepo.Create(ctx, pipeline); err != nil {
@@ -84,4 +88,16 @@ func (s *pipelineService) VerifyPermissions(ctx context.Context, pipelineID, use
 		return false, ErrNotFound
 	}
 	return s.orgService.VerifyRBACPermissions(ctx, project.OrganizationID, userID, requiredRole)
+}
+
+func (s *pipelineService) ListPipelinesByProject(ctx context.Context, projectID uuid.UUID, limit, offset int) ([]database.Pipeline, error) {
+	return s.pipelineRepo.ListByProject(ctx, projectID, limit, offset)
+}
+
+func (s *pipelineService) GetPipeline(ctx context.Context, id uuid.UUID) (*database.Pipeline, error) {
+	return s.pipelineRepo.GetByID(ctx, id)
+}
+
+func (s *pipelineService) DeletePipeline(ctx context.Context, id uuid.UUID) error {
+	return s.pipelineRepo.Delete(ctx, id)
 }

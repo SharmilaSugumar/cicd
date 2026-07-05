@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"forgeflow/internal/database"
+	"forgeflow/internal/execution"
 	"forgeflow/internal/repositories"
 
 	"github.com/google/uuid"
@@ -13,6 +15,8 @@ type PipelineRunService interface {
 	GenerateExecutionPlan(ctx context.Context, run *database.PipelineRun) ([]database.Job, error)
 	CreateJobs(ctx context.Context, jobs []database.Job) error
 	InitializePipelineStatus(ctx context.Context, runID uuid.UUID) error
+	ListRunsByPipeline(ctx context.Context, pipelineID uuid.UUID) ([]database.PipelineRun, error)
+	GetRunDetails(ctx context.Context, runID uuid.UUID) (*database.PipelineRun, error)
 }
 
 type pipelineRunService struct {
@@ -47,15 +51,39 @@ func (s *pipelineRunService) CreatePipelineRun(ctx context.Context, pipelineID, 
 	return run, nil
 }
 
+type pipelineConfig struct {
+	SourceType string `json:"source_type"`
+	RepoURL    string `json:"repo_url"`
+}
+
 func (s *pipelineRunService) GenerateExecutionPlan(ctx context.Context, run *database.PipelineRun) ([]database.Job, error) {
-	// Parse pipeline YAML and generate DAG of jobs.
-	// This is a placeholder since business logic/scheduling logic shouldn't be fully implemented yet.
+	pipeline, err := s.pipelineSvc.GetPipeline(ctx, run.PipelineID)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+
+	var cfg pipelineConfig
+	if pipeline.YamlConfig != "" {
+		_ = json.Unmarshal([]byte(pipeline.YamlConfig), &cfg)
+	}
+
+	repoUrl := cfg.RepoURL
+
+	payloadObj := execution.JobPayload{
+		RepoURL: repoUrl,
+		Branch:  "",
+		// We leave Dependencies, BuildCmds, TestCmds empty so the worker auto-detects them
+	}
+
+	payloadBytes, _ := json.Marshal(payloadObj)
+
 	jobs := []database.Job{
 		{
 			PipelineRunID: run.ID,
-			Name:          "build",
+			Name:          "build-and-test",
 			Status:        database.JobStatusCreated,
 			Priority:      10,
+			Payload:       string(payloadBytes),
 		},
 	}
 	return jobs, nil
@@ -81,4 +109,12 @@ func (s *pipelineRunService) InitializePipelineStatus(ctx context.Context, runID
 		return ErrInternalError
 	}
 	return nil
+}
+
+func (s *pipelineRunService) ListRunsByPipeline(ctx context.Context, pipelineID uuid.UUID) ([]database.PipelineRun, error) {
+	return s.runRepo.ListByPipelineID(ctx, pipelineID)
+}
+
+func (s *pipelineRunService) GetRunDetails(ctx context.Context, runID uuid.UUID) (*database.PipelineRun, error) {
+	return s.runRepo.GetRunDetails(ctx, runID)
 }

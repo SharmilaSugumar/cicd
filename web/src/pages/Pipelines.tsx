@@ -23,11 +23,14 @@ export function Pipelines() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [projectId, setProjectId] = useState('');
+  const [sourceType, setSourceType] = useState('github');
+  const [repoUrl, setRepoUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchPipelines = () => {
+  const fetchPipelines = (currentProjectId: string) => {
+    if (!currentProjectId) return;
     setIsLoading(true);
-    api.get('/v1/pipelines')
+    api.get(`/v1/pipelines?project_id=${currentProjectId}`)
       .then(res => {
         setPipelines(res.data || []);
       })
@@ -35,20 +38,42 @@ export function Pipelines() {
       .finally(() => setIsLoading(false));
   };
 
-  const fetchProjects = () => {
-    api.get('/v1/projects')
-      .then(res => {
-        setProjects(res.data || []);
-        if (res.data && res.data.length > 0) {
-          setProjectId(res.data[0].id);
+
+
+  const fetchOrgsAndProjects = () => {
+    api.get('/v1/organizations')
+      .then(async (res) => {
+        const orgs = res.data || [];
+        if (orgs.length > 0) {
+          try {
+            const projectsPromises = orgs.map((org: any) => 
+              api.get(`/v1/projects?organization_id=${org.id}`).catch(() => ({ data: [] }))
+            );
+            const projectsResponses = await Promise.all(projectsPromises);
+            const allProjects = projectsResponses.flatMap(p => p.data || []);
+            setProjects(allProjects);
+            if (allProjects.length > 0) {
+              setProjectId(allProjects[0].id);
+              fetchPipelines(allProjects[0].id);
+            } else {
+              setIsLoading(false);
+            }
+          } catch (err) {
+            console.error(err);
+            setIsLoading(false);
+          }
+        } else {
+          setIsLoading(false);
         }
       })
-      .catch(console.error);
+      .catch(err => {
+        console.error(err);
+        setIsLoading(false);
+      });
   };
 
   useEffect(() => {
-    fetchPipelines();
-    fetchProjects();
+    fetchOrgsAndProjects();
   }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -57,16 +82,23 @@ export function Pipelines() {
     
     setIsSubmitting(true);
     try {
+      const configObj = {
+        source_type: sourceType,
+        repo_url: sourceType === 'github' ? repoUrl : 'local',
+      };
+
       await api.post('/v1/pipelines', { 
         name, 
         description, 
         project_id: projectId,
-        yaml_config: "jobs: {}"
+        yaml_config: JSON.stringify(configObj)
       });
       setIsModalOpen(false);
       setName('');
       setDescription('');
-      fetchPipelines();
+      setRepoUrl('');
+      setSourceType('github');
+      fetchPipelines(projectId);
     } catch (error) {
       console.error(error);
     } finally {
@@ -107,7 +139,11 @@ export function Pipelines() {
             </thead>
             <tbody className="divide-y divide-slate-800">
               {pipelines.map(pipeline => (
-                <tr key={pipeline.id} className="hover:bg-slate-800/50 transition-colors">
+                <tr 
+                  key={pipeline.id} 
+                  className="hover:bg-slate-800/50 transition-colors cursor-pointer"
+                  onClick={() => window.location.href = `/pipelines/${pipeline.id}`}
+                >
                   <td className="px-6 py-4 font-medium text-slate-200">{pipeline.name}</td>
                   <td className="px-6 py-4 text-slate-500">{pipeline.description}</td>
                   <td className="px-6 py-4 text-slate-500">{new Date(pipeline.created_at).toLocaleDateString()}</td>
@@ -162,6 +198,47 @@ export function Pipelines() {
                   placeholder="What does this pipeline do?"
                   rows={3}
                 />
+              </div>
+              
+              <div className="border-t border-slate-800/60 pt-4">
+                <label className="block text-sm font-medium text-slate-300 mb-2">Source Type</label>
+                <select
+                  value={sourceType}
+                  onChange={(e) => setSourceType(e.target.value)}
+                  className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all mb-4"
+                >
+                  <option value="github">GitHub Repository</option>
+                  <option value="local">Local Folder Upload</option>
+                </select>
+
+                {sourceType === 'github' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">GitHub Repository URL</label>
+                    <input
+                      type="url"
+                      value={repoUrl}
+                      onChange={(e) => setRepoUrl(e.target.value)}
+                      className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all placeholder:text-slate-600"
+                      placeholder="https://github.com/username/repo.git"
+                      required
+                    />
+                  </div>
+                )}
+
+                {sourceType === 'local' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Select Local Folder</label>
+                    <div className="flex items-center justify-center w-full">
+                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-800 border-dashed rounded-lg cursor-pointer bg-slate-950/50 hover:bg-slate-900 transition-colors">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                          <p className="text-sm text-slate-400">Click to upload or drag and drop</p>
+                          <p className="text-xs text-slate-500 mt-1">Files will be bundled and processed locally</p>
+                        </div>
+                        <input type="file" className="hidden" {...{ webkitdirectory: "", directory: "" } as any} multiple />
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button

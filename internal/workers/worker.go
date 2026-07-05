@@ -2,6 +2,7 @@ package workers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -171,6 +172,18 @@ func (w *worker) claimAndExecute(ctx context.Context) {
 	// Execute
 	result := w.engine.ExecuteJob(ctx, job.Payload)
 
+	// Save the auto-detected language back to the payload if found
+	if result.Language != "" {
+		var payloadMap map[string]interface{}
+		if err := json.Unmarshal([]byte(job.Payload), &payloadMap); err == nil {
+			payloadMap["language"] = result.Language
+			if newPayloadBytes, err := json.Marshal(payloadMap); err == nil {
+				job.Payload = string(newPayloadBytes)
+				w.db.WithContext(ctx).Model(&job).Update("payload", job.Payload)
+			}
+		}
+	}
+
 	// Upload Logs
 	if w.db != nil {
 		msg := fmt.Sprintf("Exit Code: %d\nDuration: %v\nError: %v\nStdout:\n%s\nStderr:\n%s",
@@ -188,10 +201,50 @@ func (w *worker) claimAndExecute(ctx context.Context) {
 	finalStatus := database.JobStatusCompleted
 	if result.ExitCode != 0 || result.Error != nil {
 		finalStatus = database.JobStatusFailed
+		
+		// Push to Dead Letter Queue
+		dlqEntry := database.DeadLetterQueue{
+			JobID:        job.ID,
+			ErrorMessage: fmt.Sprintf("Exit Code: %d, Error: %v", result.ExitCode, result.Error),
+			Payload:      job.Payload,
+		}
+		if w.db != nil {
+			if err := w.db.WithContext(ctx).Create(&dlqEntry).Error; err != nil {
+				log.Printf("Error creating DLQ entry for job %s: %v", job.ID, err)
+			} else {
+				log.Printf("Job %s pushed to Dead Letter Queue", job.ID)
+			}
+		}
 	}
 
 	if err := w.jobRepo.UpdateStatus(ctx, job.ID, finalStatus); err != nil {
 		log.Printf("Error updating final job status: %v", err)
+	}
+
+	// Check if all jobs in the PipelineRun are done to update the PipelineRun status
+	if w.db != nil {
+		var pendingCount int64
+		w.db.WithContext(ctx).Model(&database.Job{}).
+			Where("pipeline_run_id = ? AND status NOT IN ?", job.PipelineRunID, []database.JobStatus{database.JobStatusCompleted, database.JobStatusFailed, database.JobStatusDeadLetter}).
+			Count(&pendingCount)
+
+		if pendingCount == 0 {
+			var failCount int64
+			w.db.WithContext(ctx).Model(&database.Job{}).
+				Where("pipeline_run_id = ? AND status IN ?", job.PipelineRunID, []database.JobStatus{database.JobStatusFailed, database.JobStatusDeadLetter}).
+				Count(&failCount)
+
+			runStatus := database.PipelineRunStatusSuccess
+			if failCount > 0 {
+				runStatus = database.PipelineRunStatusFailed
+			}
+
+			if err := w.db.WithContext(ctx).Model(&database.PipelineRun{}).Where("id = ?", job.PipelineRunID).Update("status", runStatus).Error; err != nil {
+				log.Printf("Error updating PipelineRun status: %v", err)
+			} else {
+				log.Printf("PipelineRun %s marked as %s", job.PipelineRunID, runStatus)
+			}
+		}
 	}
 
 	log.Printf("Finished job %s with status %s", job.ID, finalStatus)

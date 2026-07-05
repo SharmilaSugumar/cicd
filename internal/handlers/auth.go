@@ -62,7 +62,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := h.authSvc.LoginUser(c.Request.Context(), req.Email, req.Password)
+	user, token, err := h.authSvc.LoginUser(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
 		if err == services.ErrUnauthorized {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
@@ -74,5 +74,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
+		"user": gin.H{
+			"id":    user.ID,
+			"name":  user.Name,
+			"email": user.Email,
+		},
 	})
 }

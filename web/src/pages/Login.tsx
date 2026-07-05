@@ -16,7 +16,7 @@ export function Login() {
     setIsLoading(true);
     try {
       const response = await api.post('/v1/auth/login', { email, password });
-      login(response.data.token);
+      login(response.data.token, response.data.user);
       navigate('/');
     } catch (error) {
       console.error('Login failed', error);

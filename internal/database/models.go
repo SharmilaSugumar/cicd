@@ -26,7 +26,7 @@ type User struct {
 
 type Organization struct {
 	BaseModel
-	Name string `gorm:"not null"`
+	Name string `gorm:"not null" json:"name"`
 
 	Members  []OrganizationMember `gorm:"foreignKey:OrganizationID"`
 	Projects []Project            `gorm:"foreignKey:OrganizationID"`
@@ -44,9 +44,9 @@ type OrganizationMember struct {
 
 type Project struct {
 	BaseModel
-	OrganizationID uuid.UUID `gorm:"type:uuid;index;not null"`
-	Name           string    `gorm:"not null"`
-	Description    string
+	OrganizationID uuid.UUID `gorm:"type:uuid;index;not null" json:"organization_id"`
+	Name           string    `gorm:"not null" json:"name"`
+	Description    string    `json:"description"`
 
 	Pipelines    []Pipeline   `gorm:"foreignKey:ProjectID"`
 	Organization Organization `gorm:"foreignKey:OrganizationID"`
@@ -54,15 +54,16 @@ type Project struct {
 
 type Queue struct {
 	BaseModel
-	Name   string      `gorm:"not null"`
-	Status QueueStatus `gorm:"type:varchar(20);index;not null;default:'ACTIVE'"`
+	Name   string      `gorm:"not null" json:"name"`
+	Status QueueStatus `gorm:"type:varchar(20);index;not null;default:'ACTIVE'" json:"status"`
 }
 
 type Pipeline struct {
 	BaseModel
-	ProjectID   uuid.UUID `gorm:"type:uuid;index;not null"`
-	Name        string    `gorm:"not null"`
-	Description string
+	ProjectID   uuid.UUID `gorm:"type:uuid;index;not null" json:"project_id"`
+	Name        string    `gorm:"not null" json:"name"`
+	Description string    `json:"description"`
+	YamlConfig  string    `json:"yaml_config"`
 
 	Runs    []PipelineRun `gorm:"foreignKey:PipelineID"`
 	Project Project       `gorm:"foreignKey:ProjectID"`
@@ -70,8 +71,8 @@ type Pipeline struct {
 
 type PipelineRun struct {
 	BaseModel
-	PipelineID uuid.UUID         `gorm:"type:uuid;index;not null"`
-	Status     PipelineRunStatus `gorm:"type:varchar(20);index;not null;default:'PENDING'"`
+	PipelineID uuid.UUID         `gorm:"type:uuid;index;not null" json:"pipeline_id"`
+	Status     PipelineRunStatus `gorm:"type:varchar(20);index;not null;default:'PENDING'" json:"status"`
 
 	Jobs     []Job    `gorm:"foreignKey:PipelineRunID"`
 	Pipeline Pipeline `gorm:"foreignKey:PipelineID"`
@@ -79,16 +80,17 @@ type PipelineRun struct {
 
 type Job struct {
 	BaseModel
-	PipelineRunID uuid.UUID  `gorm:"type:uuid;index;not null"`
-	QueueID       *uuid.UUID `gorm:"type:uuid;index"`
-	Name          string     `gorm:"not null"`
-	Status        JobStatus  `gorm:"type:varchar(20);index;not null;default:'CREATED'"`
-	Priority      int        `gorm:"index;default:0"`
-	Payload       string     // JSON payload for execution
+	PipelineRunID uuid.UUID  `gorm:"type:uuid;index;not null" json:"pipeline_run_id"`
+	QueueID       *uuid.UUID `gorm:"type:uuid;index" json:"queue_id"`
+	Name          string     `gorm:"not null" json:"name"`
+	Status        JobStatus  `gorm:"type:varchar(20);index;not null;default:'CREATED'" json:"status"`
+	Priority      int        `gorm:"index;default:0" json:"priority"`
+	Payload       string     `json:"payload"` // JSON payload for execution
 
 	PipelineRun PipelineRun `gorm:"foreignKey:PipelineRunID"`
-	Queue       *Queue      `gorm:"foreignKey:QueueID"`
-	Logs        []JobLog    `gorm:"foreignKey:JobID"`
+	Queue       *Queue           `gorm:"foreignKey:QueueID"`
+	Logs        []JobLog         `gorm:"foreignKey:JobID" json:"logs"`
+	DLQ         *DeadLetterQueue `gorm:"foreignKey:JobID" json:"dlq"`
 }
 
 type JobDependency struct {
@@ -102,10 +104,10 @@ type JobDependency struct {
 
 type JobLog struct {
 	BaseModel
-	JobID   uuid.UUID `gorm:"type:uuid;index;not null"`
-	Message string    `gorm:"not null"`
+	JobID   uuid.UUID `gorm:"type:uuid;index;not null" json:"job_id"`
+	Message string    `gorm:"not null" json:"message"`
 
-	Job Job `gorm:"foreignKey:JobID"`
+	Job Job `gorm:"foreignKey:JobID" json:"-"`
 }
 
 type RetryPolicy struct {
@@ -134,9 +136,9 @@ type WorkerHeartbeat struct {
 
 type DeadLetterQueue struct {
 	BaseModel
-	JobID        uuid.UUID `gorm:"type:uuid;index;not null"`
-	ErrorMessage string
-	Payload      string
+	JobID        uuid.UUID `gorm:"type:uuid;index;not null" json:"job_id"`
+	ErrorMessage string    `json:"error_message"`
+	Payload      string    `json:"payload"`
 
-	Job Job `gorm:"foreignKey:JobID"`
+	Job Job `gorm:"foreignKey:JobID" json:"-"`
 }

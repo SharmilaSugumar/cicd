@@ -13,7 +13,7 @@ import (
 
 type AuthService interface {
 	RegisterUser(ctx context.Context, email, password, name string) (*database.User, error)
-	LoginUser(ctx context.Context, email, password string) (string, error)
+	LoginUser(ctx context.Context, email, password string) (*database.User, string, error)
 	VerifyPassword(hash, password string) bool
 	GenerateJWT(user *database.User) (string, error)
 	ValidateJWT(tokenStr string) (*jwt.RegisteredClaims, error)
@@ -59,17 +59,18 @@ func (s *authService) RegisterUser(ctx context.Context, email, password, name st
 	return user, nil
 }
 
-func (s *authService) LoginUser(ctx context.Context, email, password string) (string, error) {
+func (s *authService) LoginUser(ctx context.Context, email, password string) (*database.User, string, error) {
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
-		return "", ErrUnauthorized
+		return nil, "", ErrUnauthorized
 	}
 
 	if !s.VerifyPassword(user.PasswordHash, password) {
-		return "", ErrUnauthorized
+		return nil, "", ErrUnauthorized
 	}
 
-	return s.GenerateJWT(user)
+	token, err := s.GenerateJWT(user)
+	return user, token, err
 }
 
 func (s *authService) VerifyPassword(hash, password string) bool {

@@ -39,12 +39,15 @@ func RateLimit(maxRequests int) gin.HandlerFunc {
 		now := time.Now()
 		elapsed := now.Sub(limiter.last)
 
-		// Replenish tokens based on time passed
-		limiter.tokens += int(elapsed.Minutes()) * maxRequests
-		if limiter.tokens > maxRequests {
-			limiter.tokens = maxRequests
+		// Replenish tokens based on time passed (requests per minute -> requests per second)
+		replenish := int(elapsed.Seconds() * (float64(maxRequests) / 60.0))
+		if replenish > 0 {
+			limiter.tokens += replenish
+			if limiter.tokens > maxRequests {
+				limiter.tokens = maxRequests
+			}
+			limiter.last = now
 		}
-		limiter.last = now
 
 		if limiter.tokens <= 0 {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests"})

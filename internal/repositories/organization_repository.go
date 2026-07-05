@@ -30,7 +30,7 @@ func (r *organizationRepository) Create(ctx context.Context, org *database.Organ
 
 func (r *organizationRepository) GetByID(ctx context.Context, id uuid.UUID) (*database.Organization, error) {
 	var org database.Organization
-	err := r.db.WithContext(ctx).First(&org, "id = ?", id).Error
+	err := r.db.WithContext(ctx).Preload("Members").First(&org, "id = ?", id).Error
 	return &org, err
 }
 
@@ -44,6 +44,6 @@ func (r *organizationRepository) Delete(ctx context.Context, id uuid.UUID) error
 
 func (r *organizationRepository) List(ctx context.Context, limit, offset int) ([]database.Organization, error) {
 	var orgs []database.Organization
-	err := r.db.WithContext(ctx).Limit(limit).Offset(offset).Find(&orgs).Error
+	err := r.db.WithContext(ctx).Preload("Members").Limit(limit).Offset(offset).Find(&orgs).Error
 	return orgs, err
 }

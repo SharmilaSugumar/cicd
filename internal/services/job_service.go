@@ -39,7 +39,10 @@ func (s *jobService) RetryFailedJob(ctx context.Context, jobID uuid.UUID) error 
 	if job.Status != database.JobStatusFailed {
 		return ErrInvalidStateTransition
 	}
-	return s.TransitionJobState(ctx, jobID, database.JobStatusRetrying)
+	if err := s.TransitionJobState(ctx, jobID, database.JobStatusRetrying); err != nil {
+		return err
+	}
+	return s.TransitionJobState(ctx, jobID, database.JobStatusQueued)
 }
 
 func (s *jobService) VerifyDependencyCompletion(ctx context.Context, jobID uuid.UUID) (bool, error) {
